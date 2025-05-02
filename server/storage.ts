@@ -1,4 +1,6 @@
 import { users, type User, type InsertUser, userInterviews, type UserInterview, type InsertUserInterview } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -10,57 +12,47 @@ export interface IStorage {
   createUserInterview(interview: InsertUserInterview): Promise<UserInterview>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private interviews: Map<number, UserInterview>;
-  private userIdCounter: number;
-  private interviewIdCounter: number;
-
-  constructor() {
-    this.users = new Map();
-    this.interviews = new Map();
-    this.userIdCounter = 1;
-    this.interviewIdCounter = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
     return user;
   }
 
   async getUserInterviews(userId: number): Promise<UserInterview[]> {
-    return Array.from(this.interviews.values()).filter(
-      (interview) => interview.userId === userId
-    );
+    return await db
+      .select()
+      .from(userInterviews)
+      .where(eq(userInterviews.userId, userId));
   }
 
   async getUserInterview(id: number): Promise<UserInterview | undefined> {
-    return this.interviews.get(id);
+    const [interview] = await db
+      .select()
+      .from(userInterviews)
+      .where(eq(userInterviews.id, id));
+    return interview || undefined;
   }
 
   async createUserInterview(insertInterview: InsertUserInterview): Promise<UserInterview> {
-    const id = this.interviewIdCounter++;
-    const now = new Date();
-    const interview: UserInterview = { 
-      ...insertInterview, 
-      id,
-      createdAt: now
-    };
-    this.interviews.set(id, interview);
+    const [interview] = await db
+      .insert(userInterviews)
+      .values(insertInterview)
+      .returning();
     return interview;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
